@@ -6,6 +6,10 @@ const nodemailer = require('nodemailer');
 const otpGenerator = require('otp-generator'); // Import the otp-generator library
 const User = require('../models/User');
 const config = require('../config');
+const handlebars = require('handlebars');
+const fs = require('fs');
+const path = require('path');
+
 
 // Function to generate a six-digit OTP
 // function generateOTP() {
@@ -16,7 +20,12 @@ const config = require('../config');
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
-
+  const emailTemplatePath = path.join(__dirname, '../middleware', 'emailTemplete.html');
+  const emailTemplate = fs.readFileSync(emailTemplatePath, 'utf8');
+  const compileTemplate = (data) => {
+  const compiledTemplate = handlebars.compile(emailTemplate);
+  return compiledTemplate(data);
+};
 // User registration
 async function register(req, res) {
   try {
@@ -53,14 +62,18 @@ async function register(req, res) {
       },
     });
 
+    const htmlContent = compileTemplate({
+      subject: 'One-Time Password (OTP) for Verification',
+      message: `Your OTP for verification: ${otp}`,
+    });
+    // Use 'await' to send the email
     const mailOptions = {
       from: config.EMAIL_FROM,
       to: user.email, // Use user.email instead of User.email
       subject: 'One-Time Password (OTP) for Verification',
-      text: `Your OTP for registration is: ${otp}`,
+      html: htmlContent,
     };
-
-    // Use 'await' to send the email
+    
     await transporter.sendMail(mailOptions);
 
         // Set a timer to expire the OTP in 30 seconds
@@ -92,24 +105,14 @@ async function register(req, res) {
 async function verify(req, res) {
   try {
     const { email, otp } = req.body;
-
-    // Find the user by email
     const user = await User.findOne({ email });
-
     if (!user) {
       return res.status(404).json({ error: error.message || 'User not found' });
     }
-
     if (user.isVerified) {
       return res.status(400).json({ error: 'User is already verified' });
     }
-
-    // if (otp !== user.otp) {
-    //   return res.status(400).json({ error: 'Invalid OTP' });
-    // }
-    // Mark the user as verified and clear the OTP
     user.isVerified = true;
-    // user.otp = undefined;
     await user.save();
 
     return res.status(200).json({ message: 'Email verification successful' });
@@ -165,7 +168,32 @@ async function getUsers(req, res) {
   }
 }
 
+async function sendEmail( email, otp ) {
+   
+  const transporter = nodemailer.createTransport({
+    service: config.EMAIL_SERVICE,
+    auth: {
+      user: config.EMAIL_USER,
+      pass: config.EMAIL_PASSWORD,
+    },
+  });
+  const mailOptions = {
+    from: config.EMAIL_FROM,
+    to: email,
+    subject: 'One-Time Password (OTP) for Verification',
+    text: `Your OTP for registration is: ${otp}`,
+  };
+  await transporter.sendMail(mailOptions);
+  
+}
+
+async function Logout(req,res){
+  req.logout();
+  req.flash('success','Successfully logged out!');
+
+};
+
 module.exports = {
-  register, verify, loginUser, getUsers
+  register, verify, loginUser, getUsers, Logout
 };
 
